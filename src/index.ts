@@ -35,17 +35,25 @@ const searchClient = customsearch('v1');
 export const SearchArgumentsSchema = z.object({
   query: z.string().min(1),
   numResults: z.number().min(1).max(10).optional().default(5),
+  country: z.string().optional(),
 });
 
 // Helper function to perform Google Custom Search
-export async function performSearch(query: string, numResults: number): Promise<customsearch_v1.Schema$Search> {
+export async function performSearch(query: string, numResults: number, country?: string): Promise<customsearch_v1.Schema$Search> {
   try {
-    const response = await searchClient.cse.list({
+    const searchParams: any = {
       auth: GOOGLE_API_KEY,
       cx: GOOGLE_SEARCH_ENGINE_ID,
       q: query,
       num: numResults,
-    });
+    };
+
+    // Add country parameter if provided
+    if (country && country.length === 2) {
+      searchParams.gl = country.toLowerCase();
+    }
+
+    const response = await searchClient.cse.list(searchParams);
 
     return response.data;
   } catch (error) {
@@ -55,9 +63,14 @@ export async function performSearch(query: string, numResults: number): Promise<
 }
 
 // Format search results
-export function formatSearchResults(searchData: customsearch_v1.Schema$Search): string {
+export function formatSearchResults(searchData: customsearch_v1.Schema$Search, country?: string): string {
   if (!searchData.items || searchData.items.length === 0) {
     return "No results found.";
+  }
+
+  let header = "";
+  if (country && country.length === 2) {
+    header = `Search results for region: ${country.toUpperCase()}\n\n`;
   }
 
   const formattedResults = searchData.items.map((item, index) => {
@@ -70,7 +83,7 @@ export function formatSearchResults(searchData: customsearch_v1.Schema$Search): 
     ].join("\n");
   });
 
-  return formattedResults.join("\n\n");
+  return header + formattedResults.join("\n\n");
 }
 
 // Setup server function (exported for testing)
@@ -107,6 +120,10 @@ export default async function setupServer(): Promise<Server> {
                 description: "Number of results to return (max 10)",
                 default: 5,
               },
+              country: {
+                type: "string",
+                description: "Region for localized results. Use 2-letter ISO 3166-1 country codes (e.g., 'us' for United States, 'gb' for United Kingdom, 'au' for Australia)",
+              },
             },
             required: ["query"],
           },
@@ -121,10 +138,10 @@ export default async function setupServer(): Promise<Server> {
 
     try {
       if (name === "search") {
-        const { query, numResults } = SearchArgumentsSchema.parse(args);
+        const { query, numResults, country } = SearchArgumentsSchema.parse(args);
         
-        const searchResults = await performSearch(query, numResults);
-        const formattedResults = formatSearchResults(searchResults);
+        const searchResults = await performSearch(query, numResults, country);
+        const formattedResults = formatSearchResults(searchResults, country);
 
         return {
           content: [

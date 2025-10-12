@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 import { z } from 'zod';
 import { customsearch } from '@googleapis/customsearch';
-import { EnvSchema, formatSearchResults } from '../src/index.js';
+import { EnvSchema, formatSearchResults, SearchArgumentsSchema } from '../src/index.js';
 
 // Mock the Google Custom Search API
 jest.mock('@googleapis/customsearch', () => ({
@@ -70,6 +70,65 @@ describe('Google Custom Search functions', () => {
 
       const formatted = formatSearchResults(mockResults);
       expect(formatted).toBe('No results found.');
+    });
+
+    it('should include country header when country is specified', async () => {
+      const mockResults = {
+        items: [
+          {
+            title: 'Test Title',
+            link: 'https://example.com',
+            snippet: 'Test Description'
+          }
+        ]
+      };
+
+      const formatted = formatSearchResults(mockResults, 'us');
+      expect(formatted).toContain('Search results for region: US');
+      expect(formatted).toContain('Test Title');
+    });
+
+    it('should not include country header when country is not specified', async () => {
+      const mockResults = {
+        items: [
+          {
+            title: 'Test Title',
+            link: 'https://example.com',
+            snippet: 'Test Description'
+          }
+        ]
+      };
+
+      const formatted = formatSearchResults(mockResults);
+      expect(formatted).not.toContain('Search results for region:');
+    });
+  });
+
+  describe('SearchArgumentsSchema', () => {
+    it('should accept valid country codes', () => {
+      const result = SearchArgumentsSchema.parse({
+        query: 'test',
+        country: 'us'
+      });
+      expect(result.country).toBe('us');
+    });
+
+    it('should accept queries without country', () => {
+      const result = SearchArgumentsSchema.parse({
+        query: 'test'
+      });
+      expect(result.country).toBeUndefined();
+    });
+
+    it('should accept various country codes', () => {
+      const countryCodes = ['us', 'gb', 'au', 'de', 'fr', 'jp'];
+      countryCodes.forEach(code => {
+        const result = SearchArgumentsSchema.parse({
+          query: 'test',
+          country: code
+        });
+        expect(result.country).toBe(code);
+      });
     });
   });
 });
